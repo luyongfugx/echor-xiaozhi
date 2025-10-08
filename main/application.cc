@@ -9,7 +9,7 @@
 #include "mcp_server.h"
 #include "assets.h"
 #include "settings.h"
-
+#include "imu_gesture.h"
 #include <cstring>
 #include <esp_log.h>
 #include <cJSON.h>
@@ -34,6 +34,8 @@ static const char* const STATE_STRINGS[] = {
     "fatal_error",
     "invalid_state"
 };
+//imu
+static IMUGesture imu_gesture;
 
 Application::Application() {
     event_group_ = xEventGroupCreate();
@@ -540,6 +542,25 @@ void Application::Start() {
         display->SetChatMessage("system", "");
         // Play the success sound to indicate the device is ready
         audio_service_.PlaySound(Lang::Sounds::OGG_SUCCESS);
+    }
+    //imu 检测
+    if (imu_gesture.init()) {
+        imu_gesture.gesture_signal.connect([this](IMUGesture::GestureType type) {
+            if (type == IMUGesture::GestureType::ANY_MOTION) {
+                Schedule([this]() {
+                    ESP_LOGW(TAG, "imu_gesture.gesture_signal change emotion to confused");
+                    auto display = Board::GetInstance().GetDisplay();
+                    display->SetEmotion("confused");
+                    // 2.5秒后恢复中性表情
+                    vTaskDelay(pdMS_TO_TICKS(2500));
+                    if (device_state_ == kDeviceStateIdle) {
+                        display->SetEmotion("neutral");
+                    }
+                });
+            }
+        });
+    } else {
+        ESP_LOGW(TAG, "IMU gesture init failed");
     }
 }
 
