@@ -181,7 +181,8 @@ bool IMUGesture::init()
         .intr_type = GPIO_INTR_NEGEDGE,
     };
     gpio_config(&io_conf);
-    gpio_install_isr_service(0);
+    //注释掉，因为在 EchoEar.cc 里面已经做了这个处理
+   // gpio_install_isr_service(0);
 
     if (gpio_isr_handler_add(BSP_IMU_INT, gpioIsrHandler, this) != ESP_OK) {
         ESP_LOGE(TAG, "isr handler add failed");
