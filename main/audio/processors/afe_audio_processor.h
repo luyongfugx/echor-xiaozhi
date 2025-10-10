@@ -9,10 +9,16 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/time.h>
 
 #include "audio_processor.h"
 #include "audio_codec.h"
 #include "esp_doa.h"
+#include <cmath>
+#define _USE_MATH_DEFINES
 
 class AfeAudioProcessor : public AudioProcessor {
 public:
@@ -28,7 +34,8 @@ public:
     void OnVadStateChange(std::function<void(bool speaking)> callback) override;
     size_t GetFeedSize() override;
     void EnableDeviceAec(bool enable) override;
-
+    void generate_test_frame(int16_t *left, int16_t *right, int frame_size, float angle_deg, int sample_rate);
+    void test_doa();
 private:
     EventGroupHandle_t event_group_ = nullptr;
     esp_afe_sr_iface_t* afe_iface_ = nullptr;
@@ -40,6 +47,7 @@ private:
     bool is_speaking_ = false;
     std::vector<int16_t> output_buffer_;
     void AudioProcessorTask();
+
     // void TestDoaFunctionality();
     // doa_handle_t* doa_handle_ = nullptr;
     // int doa_sample_rate_ = 16000;

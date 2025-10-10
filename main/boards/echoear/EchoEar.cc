@@ -247,11 +247,11 @@ public:
     }
     static void TaskFunction(void *pvParameters)
     {
-       // Charge* charge = static_cast<Charge*>(pvParameters);
-        //while (true) {
-           // charge->Printcharge();
-           // vTaskDelay(pdMS_TO_TICKS(300));
-       // }
+       Charge* charge = static_cast<Charge*>(pvParameters);
+        while (true) {
+           charge->Printcharge();
+           vTaskDelay(pdMS_TO_TICKS(300));
+       }
     }
 
 private:

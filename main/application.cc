@@ -10,6 +10,7 @@
 #include "assets.h"
 #include "settings.h"
 #include "imu_gesture.h"
+#include "uart/uart_example.h"
 #include <cstring>
 #include <esp_log.h>
 #include <cJSON.h>
@@ -543,6 +544,14 @@ void Application::Start() {
         // Play the success sound to indicate the device is ready
         audio_service_.PlaySound(Lang::Sounds::OGG_SUCCESS);
     }
+    // 初始化UART通信
+    UartExample::GetInstance().Initialize();
+    
+    // 设置UART数据接收回调
+    UartExample::GetInstance().SetDataReceivedCallback([this](const std::string& data) {
+        OnUartDataReceived(data);
+    });
+
     //imu 检测
     if (imu_gesture.init()) {
         imu_gesture.gesture_signal.connect([this](IMUGesture::GestureType type) {
@@ -562,6 +571,11 @@ void Application::Start() {
     } else {
         ESP_LOGW(TAG, "IMU gesture init failed");
     }
+
+    // 示例：启动UART数据发送任务（每20秒发送一次）
+    Schedule([this]() {
+        StartUartDataTask();
+    });
 }
 
 // Add a async task to MainLoop
@@ -890,4 +904,164 @@ void Application::SetAecMode(AecMode mode) {
 
 void Application::PlaySound(const std::string_view& sound) {
     audio_service_.PlaySound(sound);
+}
+
+void Application::SendUartMessage(const std::string& message) {
+    Schedule([this, message]() {
+        UartExample::GetInstance().SendMessage(message);
+    });
+}
+
+bool Application::IsUartRunning() const {
+    auto& uart = UartCommunication::GetInstance();
+    return uart.IsRunning();
+}
+
+void Application::StartUartDataTask() {
+    static constexpr const char* TX_TAG = "UartDataTask";
+    
+    // 创建定时器来定期发送数据
+    esp_timer_handle_t uart_timer_handle = nullptr;
+    
+    esp_timer_create_args_t uart_timer_args = {
+        .callback = [](void* arg) {
+            ESP_LOGE(TX_TAG, "StartUartDataTask send data");
+            Application* app = (Application*)arg;
+            app->SendPeriodicUartData();
+        },
+        .arg = this,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "uart_data_timer",
+        .skip_unhandled_events = true
+    };
+    
+    if (esp_timer_create(&uart_timer_args, &uart_timer_handle) == ESP_OK) {
+        // 启动定时器，每20秒触发一次
+        esp_timer_start_periodic(uart_timer_handle, 20000000); // 20秒 = 20,000,000微秒
+        ESP_LOGI(TX_TAG, "UART data task started, will send data every 20 seconds");
+    } else {
+        ESP_LOGE(TX_TAG, "Failed to create UART data timer");
+    }
+}
+
+void Application::SendPeriodicUartData() {
+    static constexpr const char* TX_TAG = "UartPeriodic";
+    static int message_count = 0;
+    
+    // 创建JSON对象
+    cJSON *root = cJSON_CreateObject();
+    if (root == NULL) {
+        ESP_LOGE(TX_TAG, "Failed to create JSON object.");
+        return;
+    }
+
+    // 添加数据字段
+    cJSON_AddStringToObject(root, "device_id", "ESP32_01");
+    cJSON_AddNumberToObject(root, "message_id", ++message_count);
+    cJSON_AddNumberToObject(root, "angle", 45.5 + (message_count % 10));  // 模拟变化的角
+    // cJSON_AddBoolToObject(root, "status", true);
+    // cJSON_AddNumberToObject(root, "timestamp", esp_timer_get_time() / 1000000);  // 当前时间戳（秒）
+    
+    // // 添加系统信息
+    // cJSON_AddNumberToObject(root, "free_heap", esp_get_free_heap_size());
+    // cJSON_AddNumberToObject(root, "min_free_heap", esp_get_minimum_free_heap_size());
+    
+    // // 添加设备状态
+    // const char* state_str = STATE_STRINGS[device_state_];
+    // cJSON_AddStringToObject(root, "device_state", state_str);
+    
+    // // 添加UART统计信息
+    // auto& uart = UartCommunication::GetInstance();
+    // if (uart.IsRunning()) {
+    //     cJSON_AddNumberToObject(root, "uart_received_bytes", uart.GetReceivedBytes());
+    //     cJSON_AddNumberToObject(root, "uart_sent_bytes", uart.GetSentBytes());
+    // }
+
+    // 将JSON对象转换为字符串
+    char *json_str = cJSON_PrintUnformatted(root);
+    if (json_str != NULL) {
+        // 发送JSON消息到UART
+        SendUartMessage(json_str);
+        ESP_LOGI(TX_TAG, "Sent periodic JSON to UART (#%d): %s", message_count, json_str);
+        
+        // 释放内存
+        free(json_str);
+    } else {
+        ESP_LOGE(TX_TAG, "Failed to print JSON object.");
+    }
+
+    // 释放JSON对象
+    cJSON_Delete(root);
+}
+
+void Application::OnUartDataReceived(const std::string& data) {
+    static constexpr const char* RX_TAG = "UartReceive";
+    ESP_LOGI(RX_TAG, "Processing UART data: %s", data.c_str());
+    
+    // 播放表情
+    PlayEmotionForUartData(data);
+    
+    // 这里可以添加其他数据处理逻辑
+    // 例如：解析命令、更新状态等
+}
+
+void Application::PlayEmotionForUartData(const std::string& data) {
+    static constexpr const char* EMOTION_TAG = "UartEmotion";
+    
+    // 根据接收到的数据内容播放不同的表情
+    std::string lower_data = data;
+    std::transform(lower_data.begin(), lower_data.end(), lower_data.begin(), ::tolower);
+    
+    Schedule([this, lower_data]() {
+        auto display = Board::GetInstance().GetDisplay();
+        
+        if (lower_data.find("happy") != std::string::npos || 
+            lower_data.find("smile") != std::string::npos ||
+            lower_data.find("good") != std::string::npos) {
+            // 收到积极消息，播放开心表情
+            ESP_LOGI(EMOTION_TAG, "Playing happy emotion for positive message");
+            display->SetEmotion("smile");
+            audio_service_.PlaySound(Lang::Sounds::OGG_SUCCESS);
+            
+        } else if (lower_data.find("sad") != std::string::npos || 
+                   lower_data.find("bad") != std::string::npos ||
+                   lower_data.find("error") != std::string::npos) {
+            // 收到消极消息，播放悲伤表情
+            ESP_LOGI(EMOTION_TAG, "Playing sad emotion for negative message");
+            display->SetEmotion("sad");
+            audio_service_.PlaySound(Lang::Sounds::OGG_EXCLAMATION);
+            
+        } else if (lower_data.find("hello") != std::string::npos || 
+                   lower_data.find("hi") != std::string::npos ||
+                   lower_data.find("greeting") != std::string::npos) {
+            // 收到问候消息，播放友好表情
+            ESP_LOGI(EMOTION_TAG, "Playing greeting emotion");
+            display->SetEmotion("wink");
+            audio_service_.PlaySound(Lang::Sounds::OGG_POPUP);
+            
+        } else if (lower_data.find("question") != std::string::npos || 
+                   lower_data.find("?") != std::string::npos) {
+            // 收到问题，播放思考表情
+            ESP_LOGI(EMOTION_TAG, "Playing thinking emotion for question");
+            display->SetEmotion("thinking");
+            
+        } else if (lower_data.find("surprise") != std::string::npos || 
+                   lower_data.find("wow") != std::string::npos) {
+            // 收到惊喜消息，播放惊讶表情
+            ESP_LOGI(EMOTION_TAG, "Playing surprised emotion");
+            display->SetEmotion("surprised");
+            audio_service_.PlaySound(Lang::Sounds::OGG_VIBRATION);
+            
+        } else {
+            // 默认情况：播放中性表情，表示收到数据
+            ESP_LOGI(EMOTION_TAG, "Playing neutral emotion for general message");
+            display->SetEmotion("neutral");
+        }
+        
+        // 3秒后恢复原来的表情
+        vTaskDelay(pdMS_TO_TICKS(3000));
+        if (device_state_ == kDeviceStateIdle) {
+            display->SetEmotion("neutral");
+        }
+    });
 }

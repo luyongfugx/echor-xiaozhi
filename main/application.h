@@ -64,6 +64,41 @@ public:
     void PlaySound(const std::string_view& sound);
     AudioService& GetAudioService() { return audio_service_; }
 
+    /**
+     * @brief 发送UART消息
+     * @param message 要发送的消息
+     */
+    void SendUartMessage(const std::string& message);
+
+    /**
+     * @brief 获取UART通信状态
+     * @return UART是否正在运行
+     */
+    bool IsUartRunning() const;
+
+private:
+    /**
+     * @brief 启动UART数据发送任务
+     */
+    void StartUartDataTask();
+
+    /**
+     * @brief 发送周期性UART数据
+     */
+    void SendPeriodicUartData();
+
+    /**
+     * @brief 处理UART接收到的数据
+     * @param data 接收到的数据
+     */
+    void OnUartDataReceived(const std::string& data);
+
+    /**
+     * @brief 根据接收到的数据播放表情
+     * @param data 接收到的数据
+     */
+    void PlayEmotionForUartData(const std::string& data);
+
 private:
     Application();
     ~Application();
