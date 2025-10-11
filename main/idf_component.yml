@@ -26,7 +26,8 @@ dependencies:
   espressif/esp-boost:
     version: "0.3.*"
     public: true
-  
+  touch_button: "*"
+  touch_slider_sensor: "*"
 
   78/esp_lcd_nv3023: ~1.0.0
   78/esp-wifi-connect: ~2.6.0

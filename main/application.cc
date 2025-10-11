@@ -10,6 +10,7 @@
 #include "assets.h"
 #include "settings.h"
 #include "imu_gesture.h"
+#include "touch_sensor.h"
 #include "uart/uart_example.h"
 #include <cstring>
 #include <esp_log.h>
@@ -37,6 +38,8 @@ static const char* const STATE_STRINGS[] = {
 };
 //imu
 static IMUGesture imu_gesture;
+//touch_sensor
+static TouchSensor touch_sensor;
 
 Application::Application() {
     event_group_ = xEventGroupCreate();
@@ -572,6 +575,13 @@ void Application::Start() {
         ESP_LOGW(TAG, "IMU gesture init failed");
     }
 
+    if (touch_sensor.init()) {
+        ESP_LOGW(TAG, "touch_sensor init succ");
+    }
+    else {
+        ESP_LOGW(TAG, "touch_sensor init failed");
+    }
+    
     // 示例：启动UART数据发送任务（每20秒发送一次）
     Schedule([this]() {
         StartUartDataTask();
