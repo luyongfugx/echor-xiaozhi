@@ -76,6 +76,12 @@ public:
      */
     bool IsUartRunning() const;
 
+    /**
+     * @brief 旋转机器人底盘到指定角度
+     * @param angle 旋转角度
+     */
+    void rotateBaseBoard(int angle);
+
 private:
     /**
      * @brief 启动UART数据发送任务
@@ -98,8 +104,6 @@ private:
      * @param data 接收到的数据
      */
     void PlayEmotionForUartData(const std::string& data);
-
-private:
     Application();
     ~Application();
 

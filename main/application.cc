@@ -1131,3 +1131,37 @@ void Application::PlayEmotionForUartData(const std::string& data) {
         }
     });
 }
+
+void Application::rotateBaseBoard(int angle) {
+    static constexpr const char* ROTATE_TAG = "RotateBaseBoard";
+    ESP_LOGI(ROTATE_TAG, "Rotating base board to angle: %d", angle);
+    
+    // 创建JSON对象
+    cJSON *root = cJSON_CreateObject();
+    if (root == NULL) {
+        ESP_LOGE(ROTATE_TAG, "Failed to create JSON object.");
+        return;
+    }
+
+    // 添加数据字段
+    cJSON_AddStringToObject(root, "device_id", "ESP32_01");
+    cJSON_AddStringToObject(root, "command", "rotate_base_board");
+    cJSON_AddNumberToObject(root, "angle", angle);
+    cJSON_AddNumberToObject(root, "timestamp", esp_timer_get_time() / 1000000);  // 当前时间戳（秒）
+    
+    // 将JSON对象转换为字符串
+    char *json_str = cJSON_PrintUnformatted(root);
+    if (json_str != NULL) {
+        // 发送JSON消息到UART
+        SendUartMessage(json_str);
+        ESP_LOGI(ROTATE_TAG, "Sent rotate command to UART: %s", json_str);
+        
+        // 释放内存
+        free(json_str);
+    } else {
+        ESP_LOGE(ROTATE_TAG, "Failed to print JSON object.");
+    }
+
+    // 释放JSON对象
+    cJSON_Delete(root);
+}

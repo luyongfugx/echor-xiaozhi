@@ -38,7 +38,31 @@ void McpServer::AddCommonTools() {
     // Backup the original tools list and restore it after adding the common tools.
     auto original_tools = std::move(tools_);
     auto& board = Board::GetInstance();
+  // rotate Tool 
 
+    AddTool("self.rotate_base_board", 
+    "Rotate by an angle, and the Rotate direction is left or right ",
+    PropertyList({
+        Property("angle", kPropertyTypeInteger),
+        Property("direction", kPropertyTypeString)
+    }), 
+    [this](const PropertyList& properties) -> ReturnValue {
+        uint8_t angle = static_cast<uint8_t>(properties["angle"].value<int>());
+        auto direction = properties["direction"].value<std::string>();
+        auto& app = Application::GetInstance();
+        app.Schedule([&app, angle, direction]() {
+            if(direction == "left"){
+                ESP_LOGW(TAG, "self.rotate_base_board left %d", 0-angle);
+                app.rotateBaseBoard(0-angle);  
+            }
+            else {
+                ESP_LOGW(TAG, "self.rotate_base_board right %d", angle);
+                app.rotateBaseBoard(angle); 
+            }
+  
+        });
+        return true;
+    });
     // Do not add custom tools here.
     // Custom tools must be added in the board's InitializeTools function.
 
@@ -126,6 +150,11 @@ void McpServer::AddCommonTools() {
 }
 
 void McpServer::AddUserOnlyTools() {
+
+  
+
+
+
     // System tools
     AddUserOnlyTool("self.get_system_info",
         "Get the system information",
