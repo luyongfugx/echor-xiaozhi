@@ -18,6 +18,7 @@
 #include <driver/gpio.h>
 #include <arpa/inet.h>
 #include <font_awesome.h>
+#include "esp_lib_utils.h"
 
 #define TAG "Application"
 
@@ -36,6 +37,9 @@ static const char* const STATE_STRINGS[] = {
     "fatal_error",
     "invalid_state"
 };
+//touch_btn 的callback
+static void touch_btn_event_cb(void *button_handle, void *usr_data);
+static void touch_sensor_switch();
 //imu
 static IMUGesture imu_gesture;
 //touch_sensor
@@ -350,7 +354,58 @@ void Application::StopListening() {
         }
     });
 }
+static void touch_sensor_switch()
+{
+    static bool is_callback_registered = false;
 
+    button_handle_t btn = touch_sensor.get_button_handle();
+    if (!is_callback_registered) {
+        ESP_UTILS_CHECK_FALSE_EXIT(ESP_OK == iot_button_register_cb(btn, BUTTON_SINGLE_CLICK, NULL, touch_btn_event_cb, NULL), "Failed to register button event callback");
+        ESP_UTILS_CHECK_FALSE_EXIT(ESP_OK == iot_button_register_cb(btn, BUTTON_LONG_PRESS_START, NULL, touch_btn_event_cb, NULL), "Failed to register button event callback");
+        ESP_UTILS_CHECK_FALSE_EXIT(ESP_OK == iot_button_register_cb(btn, BUTTON_PRESS_DOWN, NULL, touch_btn_event_cb, NULL), "Failed to register button event callback");
+        ESP_UTILS_CHECK_FALSE_EXIT(ESP_OK == iot_button_register_cb(btn, BUTTON_PRESS_UP, NULL, touch_btn_event_cb, NULL), "Failed to register button event callback");
+        is_callback_registered = true;
+    }
+}
+
+static void touch_btn_event_cb(void *button_handle, void *usr_data)
+{
+    static TickType_t last_event_time = 0;
+    const TickType_t debounce_interval = pdMS_TO_TICKS(5000); // 2.5秒防抖间隔
+    
+    // 检查时间间隔，如果小于防抖间隔则直接返回
+    TickType_t current_time = xTaskGetTickCount();
+    if ((current_time - last_event_time) < debounce_interval) {
+        ESP_UTILS_LOGI("touch_btn_event_cb: Event ignored due to debounce");
+        return;
+    }
+    last_event_time = current_time;
+    
+    button_event_t event = iot_button_get_event((button_handle_t)button_handle);
+    ESP_UTILS_LOGI("touch_btn_event_cb event: %d  ",event);
+
+    //播放表情
+    auto display = Board::GetInstance().GetDisplay();
+    display->SetEmotion("loving");
+    //播放声音 - 通过Application单例访问
+    Application::GetInstance().GetAudioService().PlaySound(Lang::Sounds::OGG_POPUP);
+            
+    // 2.5秒后恢复中性表情
+    vTaskDelay(pdMS_TO_TICKS(2500));
+    display->SetEmotion("neutral");
+    
+ 
+    // switch (event) {
+    // case BUTTON_SINGLE_CLICK:
+    //      ESP_UTILS_LOGI("BUTTON_SINGLE_CLICK == ");
+    //     break;
+    // case BUTTON_LONG_PRESS_START:
+    //      ESP_UTILS_LOGI("BUTTON_LONG_PRESS_START == ");
+    //     break;
+    // default:
+    //     break;
+    // }
+}
 void Application::Start() {
     auto& board = Board::GetInstance();
     SetDeviceState(kDeviceStateStarting);
@@ -576,6 +631,7 @@ void Application::Start() {
     }
 
     if (touch_sensor.init()) {
+        touch_sensor_switch();
         ESP_LOGW(TAG, "touch_sensor init succ");
     }
     else {

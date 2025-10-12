@@ -20,7 +20,7 @@
  }
  
  #define BSP_TOUCH_PAD1     GPIO_NUM_7
- #define TOUCH_SLIDER_ENABLED 1 // Disable touch slider for now
+#define TOUCH_SLIDER_ENABLED 0 // Disable touch slider for now
  
  const static char *TAG = "Touch Sensor";
  static const uint32_t touch_channel_list[] = { // define touch channels
@@ -164,7 +164,7 @@
      // Configure touch slider for swipe-only volume control
      touch_slider_config_t config = {
          .channel_num = channel_num,
-         .channel_list = touch_channel_list,
+         .channel_list = (uint32_t *)touch_channel_list,
          .channel_threshold = threshold,
          .channel_gold_value = NULL,
          .debounce_times = 1,            // Reduced debounce for faster response
