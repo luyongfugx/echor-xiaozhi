@@ -16,8 +16,19 @@
 
 #include "audio_processor.h"
 #include "audio_codec.h"
+
 #include "esp_doa.h"
+#include <math.h>
+
 #include <cmath>
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+#include "../doa/kiss_fft.h"
+#include "../doa/kiss_fftr.h"
+
 #define _USE_MATH_DEFINES
 
 class AfeAudioProcessor : public AudioProcessor {
@@ -36,6 +47,8 @@ public:
     void EnableDeviceAec(bool enable) override;
     void generate_test_frame(int16_t *left, int16_t *right, int frame_size, float angle_deg, int sample_rate);
     void test_doa();
+    void generate_test_frame1(float *left, float *right, int frame_size, float angle_deg);
+    void doa_sim_task();
 private:
     EventGroupHandle_t event_group_ = nullptr;
     esp_afe_sr_iface_t* afe_iface_ = nullptr;
@@ -49,11 +62,20 @@ private:
     void AudioProcessorTask();
 
     // void TestDoaFunctionality();
-    // doa_handle_t* doa_handle_ = nullptr;
-    // int doa_sample_rate_ = 16000;
-    // int doa_frame_samples_ = 1024;
-    // int total_channels_ = 0;  // 添加总通道数成员
-    // std::vector<int16_t> doa_buffer_;  // DOA 数据累积缓冲区
+    doa_handle_t* doa_handle_ = nullptr;
+    int doa_sample_rate_ = 16000;
+    int doa_frame_samples_ = 1024;
+    int total_channels_ = 0;  // 添加总通道数成员
+    std::vector<int16_t> doa_buffer_;  // DOA 数据累积缓冲区
+    std::vector<int16_t> pre_wake_word_buffer_;  // 唤醒词前音频数据缓冲区
+    size_t pre_wake_word_buffer_size_ = 0;  // 预存储缓冲区大小（0.2秒数据）
+    std::function<void(float angle)> doa_callback_;  // DOA 角度回调
+    bool doa_enabled_ = false;  // DOA检测启用标志
+    uint32_t last_buffer_check_ = 0;  // 上次缓冲区检查时间
+    uint32_t buffer_full_count_ = 0;  // 缓冲区满计数
+    uint32_t consecutive_timeouts_ = 0;  // 连续超时计数
+    
+
 };
 
 #endif 

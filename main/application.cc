@@ -987,27 +987,27 @@ void Application::StartUartDataTask() {
     static constexpr const char* TX_TAG = "UartDataTask";
     
     // 创建定时器来定期发送数据
-    esp_timer_handle_t uart_timer_handle = nullptr;
+    // esp_timer_handle_t uart_timer_handle = nullptr;
     
-    esp_timer_create_args_t uart_timer_args = {
-        .callback = [](void* arg) {
-            ESP_LOGE(TX_TAG, "StartUartDataTask send data");
-            Application* app = (Application*)arg;
-            app->SendPeriodicUartData();
-        },
-        .arg = this,
-        .dispatch_method = ESP_TIMER_TASK,
-        .name = "uart_data_timer",
-        .skip_unhandled_events = true
-    };
+    // esp_timer_create_args_t uart_timer_args = {
+    //     .callback = [](void* arg) {
+    //         ESP_LOGE(TX_TAG, "StartUartDataTask send data");
+    //         Application* app = (Application*)arg;
+    //         app->SendPeriodicUartData();
+    //     },
+    //     .arg = this,
+    //     .dispatch_method = ESP_TIMER_TASK,
+    //     .name = "uart_data_timer",
+    //     .skip_unhandled_events = true
+    // };
     
-    if (esp_timer_create(&uart_timer_args, &uart_timer_handle) == ESP_OK) {
-        // 启动定时器，每20秒触发一次
-        esp_timer_start_periodic(uart_timer_handle, 20000000); // 20秒 = 20,000,000微秒
-        ESP_LOGI(TX_TAG, "UART data task started, will send data every 20 seconds");
-    } else {
-        ESP_LOGE(TX_TAG, "Failed to create UART data timer");
-    }
+    // if (esp_timer_create(&uart_timer_args, &uart_timer_handle) == ESP_OK) {
+    //     // 启动定时器，每20秒触发一次
+    //     esp_timer_start_periodic(uart_timer_handle, 20000000); // 20秒 = 20,000,000微秒
+    //     ESP_LOGI(TX_TAG, "UART data task started, will send data every 20 seconds");
+    // } else {
+    //     ESP_LOGE(TX_TAG, "Failed to create UART data timer");
+    // }
 }
 
 void Application::SendPeriodicUartData() {
