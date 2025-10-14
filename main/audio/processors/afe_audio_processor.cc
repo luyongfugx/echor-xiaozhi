@@ -487,11 +487,11 @@ void AfeAudioProcessor::AudioProcessorTask() {
         static uint32_t last_doa_time = 0;
         static doa_handle_t* simple_doa_handle = nullptr;
         static std::vector<int16_t> accumulated_audio_data;  // 累积的音频数据
-        
+        int custom_frame_samples = 128;
       //  在主线程中初始化DOA处理器（确保线程安全）
         if (simple_doa_handle == nullptr) {
             int sample_rate = 16000;
-            int frame_samples = 256;  // 减小帧大小，减少内存使用
+            int frame_samples = custom_frame_samples;  // 减小帧大小，减少内存使用
             float mic_distance = 0.045f;  // 45毫米
             ESP_LOGI(TAG, "Initializing DOA: sample_rate=%d, frame_samples=%d, mic_distance=%.3f", 
                      sample_rate, frame_samples, mic_distance);
@@ -516,14 +516,14 @@ void AfeAudioProcessor::AudioProcessorTask() {
             
             // 安全检查：如果保存的通道数不合理，使用默认值2
             int total_channels = 2;
-            size_t required_samples = 256 * total_channels;  // 使用256帧大小
+            size_t required_samples =  custom_frame_samples * total_channels;  // 使用256帧大小
             
             ESP_LOGI(TAG, "DOA Check: accumulated_samples=%zu, total_channels=%d (saved=%d), required_samples=%zu", 
                      accumulated_audio_data.size(), total_channels, total_channels_, required_samples);
             
             // 确保有足够的数据和至少2个通道
             if (accumulated_audio_data.size() >= required_samples && total_channels >= 2) {
-               /// ESP_LOGI(TAG, "DOA Check:============xxxxxxxxxqweqeqeqwewqewqw");
+               // ESP_LOGI(TAG, "DOA Check:============xxxxxxxxxqweqeqeqwewqewqw");
                 ESP_LOGI(TAG, "Starting DOA detection in background thread");
                 
                 // 复制累积的音频数据到堆上
@@ -532,10 +532,10 @@ void AfeAudioProcessor::AudioProcessorTask() {
                 // 在单独线程中执行DOA计算
                 std::thread([this, audio_data_copy = std::move(audio_data_copy), total_channels, simple_doa_handle]() {
                     // 提取左右声道数据（使用累积数据的前256个样本）
-                    std::vector<int16_t> left_channel(256);
-                    std::vector<int16_t> right_channel(256);
+                    std::vector<int16_t> left_channel(128);
+                    std::vector<int16_t> right_channel(128);
                     
-                    for (int i = 0; i < 256; i++) {
+                    for (int i = 0; i < 128; i++) {
                         if (i * total_channels + 1 < audio_data_copy.size()) {
                             left_channel[i] = audio_data_copy[i * total_channels];  // 第一个通道
                             right_channel[i] = audio_data_copy[i * total_channels + 1];  // 第二个通道
