@@ -5,6 +5,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/event_groups.h>
+#include <esp_afe_sr_iface.h>
 
 #include <string>
 #include <vector>
@@ -13,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
+#include <thread>
 
 #include "audio_processor.h"
 #include "audio_codec.h"
@@ -49,6 +51,7 @@ public:
     void test_doa();
     void generate_test_frame1(float *left, float *right, int frame_size, float angle_deg);
     void doa_sim_task();
+    void ProcessSoundSourceLocalization(const afe_fetch_result_t* res);
 private:
     EventGroupHandle_t event_group_ = nullptr;
     esp_afe_sr_iface_t* afe_iface_ = nullptr;
@@ -74,6 +77,9 @@ private:
     uint32_t last_buffer_check_ = 0;  // 上次缓冲区检查时间
     uint32_t buffer_full_count_ = 0;  // 缓冲区满计数
     uint32_t consecutive_timeouts_ = 0;  // 连续超时计数
+    uint32_t speech_start_time_ = 0;  // 开始说话的时间
+    bool should_do_delayed_doa_ = false;  // 是否应该执行延迟的DOA检测
+    uint32_t delayed_doa_time_ = 0;  // 延迟DOA执行的时间
     
 
 };
