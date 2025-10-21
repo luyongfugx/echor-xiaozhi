@@ -192,7 +192,7 @@ void AudioService::AudioInputTask() {
         EventBits_t bits = xEventGroupWaitBits(event_group_, AS_EVENT_AUDIO_TESTING_RUNNING |
             AS_EVENT_WAKE_WORD_RUNNING | AS_EVENT_AUDIO_PROCESSOR_RUNNING,
             pdFALSE, pdFALSE, portMAX_DELAY);
-           // ESP_LOGW(TAG, "AudioInputTask running======");
+
         if (service_stopped_) {
             break;
         }

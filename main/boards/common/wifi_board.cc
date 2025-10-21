@@ -17,6 +17,8 @@
 #include <ssid_manager.h>
 #include "afsk_demod.h"
 
+#include <wifi_configuration_smart_config.h>
+#include <wifi_configuration_bluetooth.h>
 static const char *TAG = "WifiBoard";
 
 WifiBoard::WifiBoard() {
@@ -33,7 +35,21 @@ std::string WifiBoard::GetBoardType() {
 }
 
 void WifiBoard::EnterWifiConfigMode() {
-    auto& application = Application::GetInstance();
+    EnterBluetoothWifiConfigMode();
+
+    // Wait forever until reset after configuration
+    while (true) {
+        int free_sram = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+        int min_free_sram = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);
+        ESP_LOGI(TAG, "Free internal: %u minimal internal: %u", free_sram, min_free_sram);
+        vTaskDelay(pdMS_TO_TICKS(10000));
+    }
+ 
+}
+
+void WifiBoard::EnterWebWifiConfigMode() {
+    
+   auto& application = Application::GetInstance();
     application.SetDeviceState(kDeviceStateWifiConfiguring);
 
     auto& wifi_ap = WifiConfigurationAp::GetInstance();
@@ -68,9 +84,39 @@ void WifiBoard::EnterWifiConfigMode() {
     // Wait forever until reset after configuration
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(10000));
-    }
+    } 
+    
 }
 
+void WifiBoard::EnterSmartConfigWifiConfigMode() {
+    auto& application = Application::GetInstance();
+    application.SetDeviceState(kDeviceStateWifiConfiguring);
+
+    auto& bt = WifiConfigurationSmartConfig::GetInstance();
+
+    bt.Start();
+
+    std::string hint = Lang::Strings::ENTERING_WIFI_CONFIG_MODE;
+    hint += "\n\n";
+    
+    // 播报配置 WiFi 的提示
+    application.Alert(Lang::Strings::WIFI_CONFIG_MODE, hint.c_str(), "", Lang::Sounds::OGG_WIFICONFIG);
+    
+}
+
+void WifiBoard::EnterBluetoothWifiConfigMode() {
+    auto& application = Application::GetInstance();
+    application.SetDeviceState(kDeviceStateWifiConfiguring);
+
+    auto& bt = WifiConfigurationBluetooth::GetInstance();
+    bt.Start();
+
+    std::string hint = Lang::Strings::ENTERING_WIFI_CONFIG_MODE;
+    hint += "\n\n";
+    
+    // 播报配置 WiFi 的提示
+    application.Alert(Lang::Strings::WIFI_CONFIG_MODE, hint.c_str(), "", Lang::Sounds::OGG_WIFICONFIG);
+}
 void WifiBoard::StartNetwork() {
     // User can press BOOT button while starting to enter WiFi configuration mode
     if (wifi_config_mode_) {

@@ -46,11 +46,13 @@ std::string Ota::GetCheckVersionUrl() {
     if (url.empty()) {
         url = CONFIG_OTA_URL;
     }
-    return url;
+    return url + CONFIG_MANUFACTURER_CODE;
 }
 
 std::unique_ptr<Http> Ota::SetupHttp() {
     auto& board = Board::GetInstance();
+    auto app_desc = esp_app_get_description();
+
     auto network = board.GetNetwork();
     auto http = network->CreateHttp(0);
     auto user_agent = SystemInfo::GetUserAgent();
@@ -61,7 +63,7 @@ std::unique_ptr<Http> Ota::SetupHttp() {
         http->SetHeader("Serial-Number", serial_number_.c_str());
         ESP_LOGI(TAG, "Setup HTTP, User-Agent: %s, Serial-Number: %s", user_agent.c_str(), serial_number_.c_str());
     }
-    http->SetHeader("User-Agent", user_agent);
+    http->SetHeader("User-Agent", std::string(BOARD_NAME "/") + app_desc->version);
     http->SetHeader("Accept-Language", Lang::CODE);
     http->SetHeader("Content-Type", "application/json");
 
@@ -127,6 +129,10 @@ bool Ota::CheckVersion() {
         if (cJSON_IsString(code)) {
             activation_code_ = code->valuestring;
             has_activation_code_ = true;
+        }
+        cJSON* uid = cJSON_GetObjectItem(activation, "uid");
+        if (cJSON_IsString(uid)) {
+            activation_uid_ = uid->valuestring;
         }
         cJSON* challenge = cJSON_GetObjectItem(activation, "challenge");
         if (cJSON_IsString(challenge)) {
@@ -326,7 +332,10 @@ bool Ota::Upgrade(const std::string& firmware_url) {
                 
                 auto current_version = esp_app_get_description()->version;
                 ESP_LOGI(TAG, "Current version: %s, New version: %s", current_version, new_app_info.version);
-
+                if (memcmp(new_app_info.version, current_version, sizeof(new_app_info.version)) == 0) {
+                    ESP_LOGE(TAG, "Firmware version is the same, skipping upgrade");
+                    return false;
+                }
                 if (esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES, &update_handle)) {
                     esp_ota_abort(update_handle);
                     ESP_LOGE(TAG, "Failed to begin OTA");

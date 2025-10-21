@@ -192,6 +192,7 @@ void Application::CheckNewVersion(Ota& ota) {
             esp_err_t err = ota.Activate();
             if (err == ESP_OK) {
                 xEventGroupSetBits(event_group_, MAIN_EVENT_CHECK_NEW_VERSION_DONE);
+                PlaySound(Lang::Sounds::OGG_WELCOME);
                 break;
             } else if (err == ESP_ERR_TIMEOUT) {
                 vTaskDelay(pdMS_TO_TICKS(3000));

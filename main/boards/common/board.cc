@@ -108,6 +108,7 @@ std::string Board::GetSystemInfoJson() {
         }
     */
     std::string json = R"({"version":2,"language":")" + std::string(Lang::CODE) + R"(",)";
+    json += R"("type":")" + std::string(CONFIG_PRODUCT_TYPE) + R"(",)";
     json += R"("flash_size":)" + std::to_string(SystemInfo::GetFlashSize()) + R"(,)";
     json += R"("minimum_free_heap_size":")" + std::to_string(SystemInfo::GetMinimumFreeHeapSize()) + R"(",)";
     json += R"("mac_address":")" + SystemInfo::GetMacAddress() + R"(",)";
@@ -125,6 +126,7 @@ std::string Board::GetSystemInfoJson() {
     auto app_desc = esp_app_get_description();
     json += R"("application":{)";
     json += R"("name":")" + std::string(app_desc->project_name) + R"(",)";
+    json += R"("type":")" + std::string(CONFIG_APPLICATION_TYPE) + R"(",)";
     json += R"("version":")" + std::string(app_desc->version) + R"(",)";
     json += R"("compile_time":")" + std::string(app_desc->date) + R"(T)" + std::string(app_desc->time) + R"(Z",)";
     json += R"("idf_version":")" + std::string(app_desc->idf_ver) + R"(",)";

@@ -34,6 +34,7 @@ public:
 private:
     std::string activation_message_;
     std::string activation_code_;
+    std::string activation_uid_;
     bool has_new_version_ = false;
     bool has_mqtt_config_ = false;
     bool has_websocket_config_ = false;

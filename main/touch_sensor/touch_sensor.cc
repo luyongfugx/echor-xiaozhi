@@ -34,7 +34,7 @@
  {
      touch_lowlevel_type_t channel_type[] = {TOUCH_LOWLEVEL_TYPE_TOUCH, TOUCH_LOWLEVEL_TYPE_TOUCH};
      uint32_t channel_num = sizeof(touch_channel_list) / sizeof(touch_channel_list[0]);
-     ESP_LOGI(TAG, "touch channel num: %ld\n", channel_num);
+     //ESP_LOGI(TAG, "touch channel num: %ld\n", channel_num);
      touch_lowlevel_config_t low_config = {
          .channel_num = channel_num,
          .channel_list = (uint32_t *)touch_channel_list,
@@ -56,7 +56,7 @@
              .channel_threshold = 0.05, // Touch threshold (adjust as needed)
              .skip_lowlevel_init = true,
          };
-         ESP_LOGI(TAG, "Touch button %d channel: %d", i + 1, touch_channel_list[i]);
+        // ESP_LOGI(TAG, "Touch button %d channel: %d", i + 1, touch_channel_list[i]);
          // Create first touch button device
          ret = iot_button_new_touch_button_device(&btn_cfg, &touch_cfg_1, &touch_btn_handle[i]);
          if (ret != ESP_OK) {

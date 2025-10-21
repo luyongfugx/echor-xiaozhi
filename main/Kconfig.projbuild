@@ -2,7 +2,7 @@ menu "Xiaozhi Assistant"
 
 config OTA_URL
     string "Default OTA URL"
-    default "https://api.tenclass.net/xiaozhi/ota/"
+    default "https://ota.lovaiot.com/ota/"
     help
         The application will access this URL to check for new firmwares and server address.
 
@@ -606,6 +606,29 @@ config RECEIVE_CUSTOM_MESSAGE
     default n
     help
         Enable custom message reception, allow the device to receive custom messages from the server (preferably through the MQTT protocol)
+config PRODUCT_TYPE
+    string "PRODUCT TYPE"
+    default "xiaozhi-ai-001"
+    help
+        产品的型号
+
+config APPLICATION_TYPE
+    string "APPLICATION TYPE"
+    default "kevin-sp-v4-mcp"
+    help
+        固件编号
+
+config MANUFACTURER_CODE
+    string "Manufacturer Code"
+    default "5143932590709531730"
+    help
+       设备厂商编码(UID)
+
+config WIFI_PROVISIONING_UUID
+    string "WIFI Provisioning UUID"
+    default "5F3A7D2E-8B9C-41D7-AE6F-0C8B1E9A3D5F"
+    help
+       设备配网服务的UUID
 
 menu "TAIJIPAI_S3_CONFIG"
     depends on BOARD_TYPE_ESP32S3_Taiji_Pi

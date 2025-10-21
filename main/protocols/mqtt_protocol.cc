@@ -62,7 +62,7 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
     auto password = settings.GetString("password");
     int keepalive_interval = settings.GetInt("keepalive", 240);
     publish_topic_ = settings.GetString("publish_topic");
-
+    auto subscribe_topic = settings.GetString("subscribe_topic");  
     if (endpoint.empty()) {
         ESP_LOGW(TAG, "MQTT endpoint is not specified");
         if (report_error) {
@@ -113,6 +113,20 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
                     CloseAudioChannel();
                 });
             }
+        } else if (strcmp(type->valuestring, "alert") == 0) {
+            auto eventVal = cJSON_GetObjectItem(root, "event");
+            if (cJSON_IsNumber(eventVal)) {
+                int event = eventVal->valueint;
+                if (event == DEVICE_STATUS_MEMBER_SHIP_EXPIRED) {
+                    ESP_LOGW(TAG, "Received server alert event");
+                    SetError(Lang::Strings::DEVICE_MEMBERSHIP_EXPIRED);
+                    xEventGroupSetBits(event_group_handle_, MQTT_PROTOCOL_SERVER_ALERT_EVENT);
+                }
+                
+            }
+            
+            on_incoming_json_(root);
+        // 新增 end  
         } else if (on_incoming_json_ != nullptr) {
             on_incoming_json_(root);
         }
@@ -135,7 +149,8 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
         SetError(Lang::Strings::SERVER_NOT_CONNECTED);
         return false;
     }
-
+    mqtt_->Subscribe(subscribe_topic, 0);                              // 新增
+    ESP_LOGI(TAG, "Subscribe topic %s ", subscribe_topic.c_str());
     ESP_LOGI(TAG, "Connected to endpoint");
     return true;
 }
@@ -160,7 +175,7 @@ bool MqttProtocol::SendAudio(std::unique_ptr<AudioStreamPacket> packet) {
 
     std::string nonce(aes_nonce_);
     *(uint16_t*)&nonce[2] = htons(packet->payload.size());
-    *(uint32_t*)&nonce[8] = htonl(packet->timestamp);
+  //  *(uint32_t*)&nonce[8] = htonl(packet->timestamp);
     *(uint32_t*)&nonce[12] = htonl(++local_sequence_);
 
     std::string encrypted;
@@ -205,7 +220,8 @@ bool MqttProtocol::OpenAudioChannel() {
 
     error_occurred_ = false;
     session_id_ = "";
-    xEventGroupClearBits(event_group_handle_, MQTT_PROTOCOL_SERVER_HELLO_EVENT);
+    //xEventGroupClearBits(event_group_handle_, MQTT_PROTOCOL_SERVER_HELLO_EVENT);
+    xEventGroupClearBits(event_group_handle_, MQTT_PROTOCOL_SERVER_HELLO_EVENT|MQTT_PROTOCOL_SERVER_ALERT_EVENT);
 
     auto message = GetHelloMessage();
     if (!SendText(message)) {
@@ -213,7 +229,12 @@ bool MqttProtocol::OpenAudioChannel() {
     }
 
     // 等待服务器响应
-    EventBits_t bits = xEventGroupWaitBits(event_group_handle_, MQTT_PROTOCOL_SERVER_HELLO_EVENT, pdTRUE, pdFALSE, pdMS_TO_TICKS(10000));
+  //  EventBits_t bits = xEventGroupWaitBits(event_group_handle_, MQTT_PROTOCOL_SERVER_HELLO_EVENT, pdTRUE, pdFALSE, pdMS_TO_TICKS(10000));
+     EventBits_t bits = xEventGroupWaitBits(event_group_handle_, MQTT_PROTOCOL_SERVER_HELLO_EVENT|MQTT_PROTOCOL_SERVER_ALERT_EVENT, pdTRUE, pdFALSE, pdMS_TO_TICKS(10000)); 
+  if (bits & MQTT_PROTOCOL_SERVER_ALERT_EVENT) {
+        ESP_LOGE(TAG, "Received server alert");
+        return false;
+    }
     if (!(bits & MQTT_PROTOCOL_SERVER_HELLO_EVENT)) {
         ESP_LOGE(TAG, "Failed to receive server hello");
         SetError(Lang::Strings::SERVER_TIMEOUT);
@@ -224,6 +245,7 @@ bool MqttProtocol::OpenAudioChannel() {
     auto network = Board::GetInstance().GetNetwork();
     udp_ = network->CreateUdp(2);
     udp_->OnMessage([this](const std::string& data) {
+       // ESP_LOGE(TAG, "receive audio packet === size: %u", data.size());
         /*
          * UDP Encrypted OPUS Packet Format:
          * |type 1u|flags 1u|payload_len 2u|ssrc 4u|timestamp 4u|sequence 4u|
