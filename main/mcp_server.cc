@@ -83,6 +83,7 @@ void McpServer::AddCommonTools() {
         }), 
         [&board](const PropertyList& properties) -> ReturnValue {
             auto codec = board.GetAudioCodec();
+            ESP_LOGW(TAG, "set_volume call ===============");
             codec->SetOutputVolume(properties["volume"].value<int>());
             return true;
         });

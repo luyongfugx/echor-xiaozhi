@@ -189,7 +189,7 @@ std::string WifiBoard::GetBoardJson() {
     // Set the board type for OTA
     auto& wifi_station = WifiStation::GetInstance();
     std::string board_json = R"({)";
-    board_json += R"("type":")" + std::string(BOARD_TYPE) + R"(",)";
+    board_json += R"("type":")" + std::string(CONFIG_MANUFACTURER_BOARD_TYPE) + R"(",)";
     board_json += R"("name":")" + std::string(BOARD_NAME) + R"(",)";
     if (!wifi_config_mode_) {
         board_json += R"("ssid":")" + wifi_station.GetSsid() + R"(",)";

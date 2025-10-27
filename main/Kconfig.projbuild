@@ -629,6 +629,12 @@ config WIFI_PROVISIONING_UUID
     default "5F3A7D2E-8B9C-41D7-AE6F-0C8B1E9A3D5F"
     help
        设备配网服务的UUID
+       
+config MANUFACTURER_BOARD_TYPE
+    string "BOARD TYPE"
+    default "kevin-sp-v4-dev"
+    help
+        主控板的型号
 
 menu "TAIJIPAI_S3_CONFIG"
     depends on BOARD_TYPE_ESP32S3_Taiji_Pi
