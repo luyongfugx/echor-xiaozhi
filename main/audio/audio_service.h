@@ -112,6 +112,7 @@ public:
     bool ReadAudioData(std::vector<int16_t>& data, int sample_rate, int samples);
     void ResetDecoder();
     void SetModelsList(srmodel_list_t* models_list);
+    void TestDOAWithAngle(float angle_deg);
 
 private:
     AudioCodec* codec_ = nullptr;
@@ -159,7 +160,9 @@ private:
     void PushTaskToEncodeQueue(AudioTaskType type, std::vector<int16_t>&& pcm);
     void SetDecodeSampleRate(int sample_rate, int frame_duration);
     void CheckAndUpdateAudioPowerState();
-
+    void PerformDOADetection();
+    void GenerateTestAudioData(float angle_deg, int duration_ms = 1000);
+    void generate_test_frame(int16_t *left, int16_t *right, int frame_size, float angle_deg, int sample_rate);
     // void TestDoaFunctionality();
     doa_handle_t* doa_handle_ = nullptr;
     int doa_sample_rate_ = 16000;

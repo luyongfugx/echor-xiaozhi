@@ -1,6 +1,7 @@
 #include "audio_service.h"
 #include <esp_log.h>
 #include <cstring>
+#include <cmath>
 
 #if CONFIG_USE_AUDIO_PROCESSOR
 #include "processors/afe_audio_processor.h"
@@ -204,40 +205,30 @@ void AudioService::AudioInputTask() {
 
         /* Used for audio testing in NetworkConfiguring mode by clicking the BOOT button */
         if (bits & AS_EVENT_AUDIO_TESTING_RUNNING) {
-           // ESP_LOGI(TAG, "AS_EVENT_AUDIO_TESTING_RUNNING ============== ");
-            //doa
-            static uint32_t last_doa_time = 0;
-            static doa_handle_t* simple_doa_handle = nullptr;
-            static std::vector<int16_t> accumulated_audio_data;  // 累积的音频数据
-            static uint32_t last_doa_detection_time = 0;  // 上次DOA检测时间
+            // static uint32_t last_doa_detection_time = 0;  // 上次DOA检测时间
+            // static doa_handle_t* simple_doa_handle = nullptr;
 
             //  在主线程中初始化DOA处理器（确保线程安全）
-            if (simple_doa_handle == nullptr) {
-                int sample_rate = 16000;
-                int frame_samples = 128;  // 使用128帧大小
-                float mic_distance = 0.045f;  // 45毫米
-                ESP_LOGI(TAG, "Initializing DOA: sample_rate=%d, frame_samples=%d, mic_distance=%.3f", 
-                        sample_rate, frame_samples, mic_distance);
-                simple_doa_handle = esp_doa_create(sample_rate, mic_distance, 0.06f, frame_samples);
-                if (simple_doa_handle) {
-                    ESP_LOGI(TAG, "Simple DOA initialized successfully");
-                } else {
-                    ESP_LOGE(TAG, "Failed to initialize simple DOA");
-                    simple_doa_handle = nullptr;
-                }
-                // 初始化计时器
-                last_doa_detection_time = xTaskGetTickCount();
-            }
-              // 安全检查：如果保存的通道数不合理，使用默认值2
-              int total_channels = 2;
-              size_t required_samples = 128 * total_channels;  // DOA处理需要的样本数
+            // if (simple_doa_handle == nullptr) {
+            //     int sample_rate = 16000;
+            //     int frame_samples = 128;  // 使用128帧大小
+            //     float mic_distance = 0.045f;  // 45毫米
+            //     ESP_LOGI(TAG, "Initializing DOA for testing: sample_rate=%d, frame_samples=%d, mic_distance=%.3f", 
+            //             sample_rate, frame_samples, mic_distance);
+            //     simple_doa_handle = esp_doa_create(sample_rate, mic_distance, 0.06f, frame_samples);
+            //     if (simple_doa_handle) {
+            //         ESP_LOGI(TAG, "DOA for testing initialized successfully");
+            //     } else {
+            //         ESP_LOGE(TAG, "Failed to initialize DOA for testing");
+            //         simple_doa_handle = nullptr;
+            //     }
+            //     // 初始化计时器
+            //     last_doa_detection_time = xTaskGetTickCount();
+            // }
               
-              // 检查是否达到2秒的音频数据 (16000 Hz * 2秒 * 2通道 = 64000个样本)
-              size_t two_seconds_samples = 16000 * 2 * total_channels;
-              
-            //   ESP_LOGI(TAG, "DOA Check: accumulated_samples=%zu, required_samples=%zu, two_seconds_samples=%zu", 
-            //            accumulated_audio_data.size(), required_samples, two_seconds_samples);
-              
+            // int total_channels = 2;
+            // size_t required_samples = 128 * total_channels;  // DOA处理需要的样本数
+            // size_t two_seconds_samples = 16000 * 2 * total_channels;  // 2秒的音频数据
 
             if (audio_testing_queue_.size() >= AUDIO_TESTING_MAX_DURATION_MS / OPUS_FRAME_DURATION_MS) {
                 ESP_LOGW(TAG, "Audio testing queue is full, stopping audio testing");
@@ -246,58 +237,58 @@ void AudioService::AudioInputTask() {
             }
             
             // 使用计时器检查是否达到2秒间隔
-            uint32_t current_time = xTaskGetTickCount();
-            uint32_t time_since_last_detection = (current_time - last_doa_detection_time) * portTICK_PERIOD_MS;
+            // uint32_t current_time = xTaskGetTickCount();
+            // uint32_t time_since_last_detection = (current_time - last_doa_detection_time) * portTICK_PERIOD_MS;
             
-            // 确保有足够的数据和至少2个通道，并且达到2秒间隔
-            if (accumulated_audio_data.size() >= required_samples && total_channels >= 2 && time_since_last_detection >= 2000) {
-                ESP_LOGI(TAG, "Starting DOA detection in background thread (2 seconds timer interval)");
+            // // 确保有足够的数据和至少2个通道，并且达到2秒间隔
+            // if (doa_buffer_.size() >= required_samples && total_channels >= 2 && time_since_last_detection >= 2000) {
+            //     ESP_LOGI(TAG, "Starting DOA detection in background thread (2 seconds timer interval)");
                  
-                 // 使用最新的128帧数据（当前时间往前的最新数据）
-                 size_t start_index = accumulated_audio_data.size() - required_samples;
-                 std::vector<int16_t> audio_data_copy(accumulated_audio_data.begin() + start_index, accumulated_audio_data.end());
+            //      // 使用最新的128帧数据（当前时间往前的最新数据）
+            //      size_t start_index = doa_buffer_.size() - required_samples;
+            //      std::vector<int16_t> audio_data_copy(doa_buffer_.begin() + start_index, doa_buffer_.end());
                  
-                 // 更新检测时间
-                 last_doa_detection_time = current_time;
+            //      // 更新检测时间
+            //      last_doa_detection_time = current_time;
                  
-                 // 在单独线程中执行DOA计算
-                 std::thread([this, audio_data_copy = std::move(audio_data_copy), total_channels, simple_doa_handle]() {
-                     int frame_samples = 128;  // 使用变量定义帧大小
-                     // 提取左右声道数据（使用最新的frame_samples个样本）
-                     std::vector<int16_t> left_channel(frame_samples);
-                     std::vector<int16_t> right_channel(frame_samples);
+            //      // 在单独线程中执行DOA计算
+            //      std::thread([this, audio_data_copy = std::move(audio_data_copy), total_channels, simple_doa_handle]() {
+            //          int frame_samples = 128;  // 使用变量定义帧大小
+            //          // 提取左右声道数据（使用最新的frame_samples个样本）
+            //          std::vector<int16_t> left_channel(frame_samples);
+            //          std::vector<int16_t> right_channel(frame_samples);
                      
-                     for (int i = 0; i < frame_samples; i++) {
-                         if (i * total_channels + 1 < audio_data_copy.size()) {
-                             left_channel[i] = audio_data_copy[i * total_channels];  // 第一个通道
-                             right_channel[i] = audio_data_copy[i * total_channels + 1];  // 第二个通道
-                         }
-                     }
+            //          for (int i = 0; i < frame_samples; i++) {
+            //              if (i * total_channels + 1 < audio_data_copy.size()) {
+            //                  left_channel[i] = audio_data_copy[i * total_channels];  // 第一个通道
+            //                  right_channel[i] = audio_data_copy[i * total_channels + 1];  // 第二个通道
+            //              }
+            //          }
                      
-                     // 进行DOA计算
-                     float angle = esp_doa_process(simple_doa_handle, left_channel.data(), right_channel.data());
+            //          // 进行DOA计算
+            //          float angle = esp_doa_process(simple_doa_handle, left_channel.data(), right_channel.data());
                      
-                     // 打印角度信息
-                     ESP_LOGI(TAG, "Sound Source Direction: %.1f degrees", angle);
-                 }).detach(); // 分离线程，让它独立运行
-                 
-                 // 限制累积数据大小，避免无限增长（保留最近2秒的数据）
-                 if (accumulated_audio_data.size() > two_seconds_samples) {
-                     accumulated_audio_data.erase(accumulated_audio_data.begin(), 
-                         accumulated_audio_data.begin() + (accumulated_audio_data.size() - two_seconds_samples));
-                 }
-             } else if (time_since_last_detection < 2000) {
-                // ESP_LOGI(TAG, "DOA timer not reached: %ums since last detection", time_since_last_detection);
-             } else {
-                 ESP_LOGW(TAG, "DOA conditions not met: accumulated_samples=%zu, required=%zu", 
-                          accumulated_audio_data.size(), required_samples);
-             }
+            //          // 打印角度信息
+            //          ESP_LOGI(TAG, "Testing Sound Source Direction: %.1f degrees", angle);
+            //      }).detach(); // 分离线程，让它独立运行
+            //  } else if (time_since_last_detection < 2000) {
+            //     // ESP_LOGI(TAG, "DOA timer not reached: %ums since last detection", time_since_last_detection);
+            //  } else {
+            //      ESP_LOGW(TAG, "DOA conditions not met: buffer_size=%zu, required=%zu", 
+            //               doa_buffer_.size(), required_samples);
+            //  }
          
-            std::vector<int16_t> data;
+             std::vector<int16_t> data;
             int samples = OPUS_FRAME_DURATION_MS * 16000 / 1000;
             if (ReadAudioData(data, 16000, samples)) {
-                // 将左右声道都加入accumulated_audio_data
-                accumulated_audio_data.insert(accumulated_audio_data.end(), data.begin(), data.end());
+                // 将音频数据累积到doa_buffer_中
+               // doa_buffer_.insert(doa_buffer_.end(), data.begin(), data.end());
+
+                // 限制doa_buffer_大小，避免无限增长（保留最近2秒的数据）
+                // if (doa_buffer_.size() > two_seconds_samples) {
+                //     doa_buffer_.erase(doa_buffer_.begin(), 
+                //         doa_buffer_.begin() + (doa_buffer_.size() - two_seconds_samples));
+                // }
 
                 // If input channels is 2, we need to fetch the left channel data for mono encoding
                 if (codec_->input_channels() == 2) {
@@ -307,7 +298,7 @@ void AudioService::AudioInputTask() {
                     }
                     data = std::move(mono_data);
                 }
-              //  PushTaskToEncodeQueue(kAudioTaskTypeEncodeToTestingQueue, std::move(data));
+                PushTaskToEncodeQueue(kAudioTaskTypeEncodeToTestingQueue, std::move(data));
                 continue;
             }
         }
@@ -318,6 +309,16 @@ void AudioService::AudioInputTask() {
             int samples = wake_word_->GetFeedSize();
             if (samples > 0) {
                 if (ReadAudioData(data, 16000, samples)) {
+                    // 将音频数据累积到doa_buffer_中，用于唤醒词触发的DOA检测
+                    // doa_buffer_.insert(doa_buffer_.end(), data.begin(), data.end());
+                    
+                    // // 限制doa_buffer_大小，避免无限增长（保留最近2秒的数据）
+                    // size_t two_seconds_samples = 16000 * 1 * 2;  // 16000 Hz * 2秒 * 2通道
+                    // if (doa_buffer_.size() > two_seconds_samples) {
+                    //     doa_buffer_.erase(doa_buffer_.begin(), 
+                    //         doa_buffer_.begin() + (doa_buffer_.size() - two_seconds_samples));
+                    // }
+                    
                     wake_word_->Feed(data);
                     continue;
                 }
@@ -736,6 +737,16 @@ void AudioService::CheckAndUpdateAudioPowerState() {
     }
 }
 
+void AudioService::TestDOAWithAngle(float angle_deg) {
+    ESP_LOGI(TAG, "Starting DOA test with angle: %.1f°", angle_deg);
+    
+    // 生成测试音频数据
+    GenerateTestAudioData(angle_deg, 1000);  // 生成1秒的测试数据
+    
+    // 执行DOA检测
+    PerformDOADetection();
+}
+
 void AudioService::SetModelsList(srmodel_list_t* models_list) {
     models_list_ = models_list;
 
@@ -757,6 +768,11 @@ void AudioService::SetModelsList(srmodel_list_t* models_list) {
 
     if (wake_word_) {
         wake_word_->OnWakeWordDetected([this](const std::string& wake_word) {
+            ESP_LOGI(TAG, "Wake word detected: %s, performing DOA detection", wake_word.c_str());
+           // GenerateTestAudioData(35, 1000);  // 生成1秒的测试数据
+            // 在唤醒词检测到时执行DOA检测
+            PerformDOADetection();
+            
             if (callbacks_.on_wake_word_detected) {
                 callbacks_.on_wake_word_detected(wake_word);
             }
@@ -770,4 +786,194 @@ bool AudioService::IsAfeWakeWord() {
 #else
     return false;
 #endif
+}
+void AudioService::generate_test_frame(int16_t *left, int16_t *right, int frame_size, float angle_deg, int sample_rate)
+{
+    int TEST_FREQ = 1000;
+    static float phase = 0.0f;
+    const float d = 0.045f;
+    const float c = 343.0f;
+
+    float theta = angle_deg * M_PI / 180.0f;
+    float tau = d * cosf(theta) / c;
+
+    int delay_samples = (int)roundf(tau * sample_rate);
+    printf("Angle: %f, Delay: %d samples\n", angle_deg, delay_samples);
+
+    for (int i = 0; i < frame_size; i++) {
+        float t = (float)(i + phase) / sample_rate;
+        left[i] = (int16_t)(sinf(2 * M_PI * TEST_FREQ * t) * 32767);
+
+        int delayed_index = i - delay_samples;
+        right[i] = (int16_t)(sinf(2 * M_PI * TEST_FREQ * (delayed_index + phase) / sample_rate) * 32767);
+        
+    }
+    phase += frame_size;
+    
+    // 将生成的测试数据添加到doa_buffer_中
+    ESP_LOGI(TAG, "Adding generated test data to doa_buffer_: %d frames", frame_size);
+    for (int i = 0; i < frame_size; i++) {
+        doa_buffer_.push_back(left[i]);
+        doa_buffer_.push_back(right[i]);
+    }
+    ESP_LOGI(TAG, "doa_buffer_ size after adding test data: %zu", doa_buffer_.size());
+}
+
+void AudioService::GenerateTestAudioData(float angle_deg, int duration_ms) {
+    const float MIC_DISTANCE_M = 0.045f;  // 麦克风间距45毫米
+    const float SPEED_SOUND = 343.0f;     // 声速343 m/s
+    const int SAMPLE_RATE = 16000;
+    const float FREQ = 1000.0f;           // 测试频率1kHz
+    
+    int total_samples = SAMPLE_RATE * duration_ms / 1000;
+    int frame_size = 128;  // 与DOA检测使用的帧大小一致
+    
+    ESP_LOGI(TAG, "Generating test audio data: angle=%.1f°, duration=%dms, samples=%d", 
+             angle_deg, duration_ms, total_samples);
+    
+    // 清空现有的doa_buffer_
+    doa_buffer_.clear();
+    
+    // 计算时间差和相位差
+    float delta_t = (MIC_DISTANCE_M * sinf(angle_deg * M_PI / 180.0f)) / SPEED_SOUND;
+    float delta_phase = 2.0f * M_PI * FREQ * delta_t;
+    
+    ESP_LOGI(TAG, "Test audio parameters: delta_t=%.6fs, delta_phase=%.3f rad", delta_t, delta_phase);
+    
+    // 生成测试音频数据
+    for (int frame_start = 0; frame_start < total_samples; frame_start += frame_size) {
+        int current_frame_size = std::min(frame_size, total_samples - frame_start);
+        
+        // 生成左右声道数据
+        for (int i = 0; i < current_frame_size; i++) {
+            float t = (float)(frame_start + i) / SAMPLE_RATE;
+            float left_sample = sinf(2.0f * M_PI * FREQ * t);
+            float right_sample = sinf(2.0f * M_PI * FREQ * t + delta_phase);
+            
+            // 转换为16位整数并交错存储
+            int16_t left_int = (int16_t)(left_sample * 32767.0f);
+            int16_t right_int = (int16_t)(right_sample * 32767.0f);
+            
+            doa_buffer_.push_back(left_int);
+            doa_buffer_.push_back(right_int);
+        }
+    }
+    
+    ESP_LOGI(TAG, "Test audio data generated: %zu samples in buffer", doa_buffer_.size());
+}
+
+void AudioService::PerformDOADetection() {
+
+
+
+    int frame_samples = 128;
+    int sample_rate = 16000;
+    int16_t *left = (int16_t *)malloc(frame_samples * sizeof(int16_t));
+    int16_t *right = (int16_t *)malloc(frame_samples * sizeof(int16_t));
+    int start_size = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+     doa_handle_t *doa = esp_doa_create(sample_rate, 0.045f, 0.06f, frame_samples);
+
+    uint32_t c0, c1, t_doa = 0;
+    int angle = 85;
+    int f =85;
+    //for (int f = 0; f < angle; f++) { // 1秒多帧
+        this->generate_test_frame(left, right, frame_samples, f*1.0, sample_rate);
+        // c0 = esp_timer_get_time();
+        float est_angle = esp_doa_process(doa, left, right);
+        // c1 = esp_timer_get_time();
+        // t_doa += c1 - c0;
+
+         printf("%.1f\t\t%.1f\n", f*1.0, est_angle); // memory leak
+   // }
+    // int doa_mem_size = start_size - heap_caps_get_free_size(MALLOC_CAP_8BIT);
+    // printf("doa memory size:%d, cpu loading:%f\n", doa_mem_size, (t_doa * 1.0 / 1000000 * sample_rate) / (angle * frame_samples));
+ 
+    // esp_doa_destroy(doa);
+
+
+    static doa_handle_t* simple_doa_handle = nullptr;
+    if(true){
+        return ;
+    }
+    
+    // 初始化DOA处理器
+    if (simple_doa_handle == nullptr) {
+        int sample_rate = 16000;
+        int frame_samples = 128;  // 使用128帧大小
+        float mic_distance = 0.045f;  // 45毫米
+        ESP_LOGI(TAG, "Initializing DOA for wake word: sample_rate=%d, frame_samples=%d, mic_distance=%.3f", 
+                sample_rate, frame_samples, mic_distance);
+        simple_doa_handle = esp_doa_create(sample_rate, mic_distance, 0.06f, frame_samples);
+        if (simple_doa_handle) {
+            ESP_LOGI(TAG, "DOA for wake word initialized successfully");
+        } else {
+            ESP_LOGE(TAG, "Failed to initialize DOA for wake word");
+            simple_doa_handle = nullptr;
+            return;
+        }
+    }
+    
+    // // 检查编解码器是否支持双麦克风输入
+    int total_channels = 2;
+    ESP_LOGI(TAG, "Audio codec input channels: %d", total_channels);
+    
+    // 只有真正的双麦克风配置才适合DOA检测
+    if (total_channels < 2) {
+        ESP_LOGW(TAG, "DOA detection requires at least 2 input channels, but only %d available", total_channels);
+        return;
+    }
+    else {
+        return ;
+    }
+    
+    size_t required_samples = 128 * total_channels;  // DOA处理需要的样本数
+    
+    // 确保有足够的数据
+    if (doa_buffer_.size() >= required_samples) {
+        ESP_LOGI(TAG, "Starting DOA detection triggered by wake word, buffer size: %zu", doa_buffer_.size());
+        
+        // 使用最新的128帧数据（当前时间往前的最新数据）
+        size_t start_index = doa_buffer_.size() - required_samples;
+        std::vector<int16_t> audio_data_copy(doa_buffer_.begin() + start_index, doa_buffer_.end());
+        
+        // 在单独线程中执行DOA计算
+        int frame_samples = 128;  // 使用变量定义帧大小
+        std::thread([this, audio_data_copy = std::move(audio_data_copy), total_channels, simple_doa_handle, frame_samples]() {
+            // 提取左右声道数据（使用最新的frame_samples个样本）
+            std::vector<int16_t> left_channel(frame_samples);
+            std::vector<int16_t> right_channel(frame_samples);
+            
+            // 添加调试信息
+            ESP_LOGI(TAG, "DOA Processing: audio_data_copy size=%zu, frame_samples=%d, total_channels=%d", 
+                    audio_data_copy.size(), frame_samples, total_channels);
+            
+            for (int i = 0; i < frame_samples; i++) {
+                if (i * total_channels + 1 < audio_data_copy.size()) {
+                    left_channel[i] = audio_data_copy[i * total_channels];      // 第一个通道
+                    right_channel[i] = audio_data_copy[i * total_channels + 1]; // 第二个通道
+                } else {
+                    // 如果数据不足，填充0
+                    left_channel[i] = 0;
+                    right_channel[i] = 0;
+                }
+            }
+            
+            // 添加声道数据调试信息
+            // int16_t left_max = 0, right_max = 0;
+            // for (int i = 0; i < frame_samples; i++) {
+            //     if (abs(left_channel[i]) > left_max) left_max = abs(left_channel[i]);
+            //     if (abs(right_channel[i]) > right_max) right_max = abs(right_channel[i]);
+            // }
+            // ESP_LOGI(TAG, "DOA Channels: left_max=%d, right_max=%d", left_max, right_max);
+            
+            // 进行DOA计算
+            float angle = esp_doa_process(simple_doa_handle, left_channel.data(), right_channel.data());
+            
+            // 打印角度信息
+            ESP_LOGE(TAG, "Wake Word Sound Source Direction: %.1f degrees   ================", angle);
+        }).detach(); // 分离线程，让它独立运行
+    } else {
+        ESP_LOGW(TAG, "Not enough data for DOA detection: buffer_size=%zu, required=%zu", 
+                 doa_buffer_.size(), required_samples);
+    }
 }

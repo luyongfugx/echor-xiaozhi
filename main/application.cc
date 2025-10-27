@@ -257,10 +257,10 @@ void Application::DismissAlert() {
 }
 
 void Application::ToggleChatState() {
-    ESP_LOGW(TAG, "ToggleChatState  ===================啊啊啊啊啊");
-    audio_service_.EnableAudioTesting(true);
-    SetDeviceState(kDeviceStateAudioTesting);
-    return;
+    // ESP_LOGW(TAG, "ToggleChatState  ===================啊啊啊啊啊");
+    // audio_service_.EnableAudioTesting(true);
+    // SetDeviceState(kDeviceStateAudioTesting);
+    // return;
 
     if (device_state_ == kDeviceStateActivating) {
         SetDeviceState(kDeviceStateIdle);
