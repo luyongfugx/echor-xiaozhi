@@ -24,6 +24,9 @@
 #include "protocol.h"
 
 
+//doa
+#include "esp_doa.h"
+
 /*
  * There are two types of audio data flow:
  * 1. (MIC) -> [Processors] -> {Encode Queue} -> [Opus Encoder] -> {Send Queue} -> (Server)
@@ -156,6 +159,21 @@ private:
     void PushTaskToEncodeQueue(AudioTaskType type, std::vector<int16_t>&& pcm);
     void SetDecodeSampleRate(int sample_rate, int frame_duration);
     void CheckAndUpdateAudioPowerState();
+
+    // void TestDoaFunctionality();
+    doa_handle_t* doa_handle_ = nullptr;
+    int doa_sample_rate_ = 16000;
+    int doa_frame_samples_ = 1024;
+    int total_channels_ = 0;  // 添加总通道数成员
+    std::vector<int16_t> doa_buffer_;  // DOA 数据累积缓冲区
+
+    std::vector<int16_t> pre_wake_word_buffer_;  // 唤醒词前音频数据缓冲区
+    size_t pre_wake_word_buffer_size_ = 0;  // 预存储缓冲区大小（0.2秒数据）
+    std::function<void(float angle)> doa_callback_;  // DOA 角度回调
+    bool doa_enabled_ = false;  // DOA检测启用标志
+    uint32_t last_buffer_check_ = 0;  // 上次缓冲区检查时间
+    uint32_t buffer_full_count_ = 0;  // 缓冲区满计数
+    uint32_t consecutive_timeouts_ = 0;  // 连续超时计数
 };
 
 #endif

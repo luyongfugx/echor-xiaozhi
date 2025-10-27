@@ -57,7 +57,7 @@ void AudioDebugger::Feed(const std::vector<int16_t>& data) {
         ssize_t sent = sendto(udp_sockfd_, data.data(), data.size() * sizeof(int16_t), 0,
                              (struct sockaddr*)&udp_server_addr_, sizeof(udp_server_addr_));
         if (sent < 0) {
-            ESP_LOGW(TAG, "Failed to send audio data to %s: %d", CONFIG_AUDIO_DEBUG_UDP_SERVER, errno);
+          //  ESP_LOGW(TAG, "Failed to send audio data to %s: %d", CONFIG_AUDIO_DEBUG_UDP_SERVER, errno);
         } else {
             ESP_LOGD(TAG, "Sent %d bytes audio data to %s", sent, CONFIG_AUDIO_DEBUG_UDP_SERVER);
         }

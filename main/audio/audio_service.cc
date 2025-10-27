@@ -204,15 +204,102 @@ void AudioService::AudioInputTask() {
 
         /* Used for audio testing in NetworkConfiguring mode by clicking the BOOT button */
         if (bits & AS_EVENT_AUDIO_TESTING_RUNNING) {
+           // ESP_LOGI(TAG, "AS_EVENT_AUDIO_TESTING_RUNNING ============== ");
+            //doa
+            static uint32_t last_doa_time = 0;
+            static doa_handle_t* simple_doa_handle = nullptr;
+            static std::vector<int16_t> accumulated_audio_data;  // 累积的音频数据
+            static uint32_t last_doa_detection_time = 0;  // 上次DOA检测时间
+
+            //  在主线程中初始化DOA处理器（确保线程安全）
+            if (simple_doa_handle == nullptr) {
+                int sample_rate = 16000;
+                int frame_samples = 128;  // 使用128帧大小
+                float mic_distance = 0.045f;  // 45毫米
+                ESP_LOGI(TAG, "Initializing DOA: sample_rate=%d, frame_samples=%d, mic_distance=%.3f", 
+                        sample_rate, frame_samples, mic_distance);
+                simple_doa_handle = esp_doa_create(sample_rate, mic_distance, 0.06f, frame_samples);
+                if (simple_doa_handle) {
+                    ESP_LOGI(TAG, "Simple DOA initialized successfully");
+                } else {
+                    ESP_LOGE(TAG, "Failed to initialize simple DOA");
+                    simple_doa_handle = nullptr;
+                }
+                // 初始化计时器
+                last_doa_detection_time = xTaskGetTickCount();
+            }
+              // 安全检查：如果保存的通道数不合理，使用默认值2
+              int total_channels = 2;
+              size_t required_samples = 128 * total_channels;  // DOA处理需要的样本数
+              
+              // 检查是否达到2秒的音频数据 (16000 Hz * 2秒 * 2通道 = 64000个样本)
+              size_t two_seconds_samples = 16000 * 2 * total_channels;
+              
+            //   ESP_LOGI(TAG, "DOA Check: accumulated_samples=%zu, required_samples=%zu, two_seconds_samples=%zu", 
+            //            accumulated_audio_data.size(), required_samples, two_seconds_samples);
+              
+
             if (audio_testing_queue_.size() >= AUDIO_TESTING_MAX_DURATION_MS / OPUS_FRAME_DURATION_MS) {
                 ESP_LOGW(TAG, "Audio testing queue is full, stopping audio testing");
                 EnableAudioTesting(false);
                 continue;
             }
+            
+            // 使用计时器检查是否达到2秒间隔
+            uint32_t current_time = xTaskGetTickCount();
+            uint32_t time_since_last_detection = (current_time - last_doa_detection_time) * portTICK_PERIOD_MS;
+            
+            // 确保有足够的数据和至少2个通道，并且达到2秒间隔
+            if (accumulated_audio_data.size() >= required_samples && total_channels >= 2 && time_since_last_detection >= 2000) {
+                ESP_LOGI(TAG, "Starting DOA detection in background thread (2 seconds timer interval)");
+                 
+                 // 使用最新的128帧数据（当前时间往前的最新数据）
+                 size_t start_index = accumulated_audio_data.size() - required_samples;
+                 std::vector<int16_t> audio_data_copy(accumulated_audio_data.begin() + start_index, accumulated_audio_data.end());
+                 
+                 // 更新检测时间
+                 last_doa_detection_time = current_time;
+                 
+                 // 在单独线程中执行DOA计算
+                 std::thread([this, audio_data_copy = std::move(audio_data_copy), total_channels, simple_doa_handle]() {
+                     int frame_samples = 128;  // 使用变量定义帧大小
+                     // 提取左右声道数据（使用最新的frame_samples个样本）
+                     std::vector<int16_t> left_channel(frame_samples);
+                     std::vector<int16_t> right_channel(frame_samples);
+                     
+                     for (int i = 0; i < frame_samples; i++) {
+                         if (i * total_channels + 1 < audio_data_copy.size()) {
+                             left_channel[i] = audio_data_copy[i * total_channels];  // 第一个通道
+                             right_channel[i] = audio_data_copy[i * total_channels + 1];  // 第二个通道
+                         }
+                     }
+                     
+                     // 进行DOA计算
+                     float angle = esp_doa_process(simple_doa_handle, left_channel.data(), right_channel.data());
+                     
+                     // 打印角度信息
+                     ESP_LOGI(TAG, "Sound Source Direction: %.1f degrees", angle);
+                 }).detach(); // 分离线程，让它独立运行
+                 
+                 // 限制累积数据大小，避免无限增长（保留最近2秒的数据）
+                 if (accumulated_audio_data.size() > two_seconds_samples) {
+                     accumulated_audio_data.erase(accumulated_audio_data.begin(), 
+                         accumulated_audio_data.begin() + (accumulated_audio_data.size() - two_seconds_samples));
+                 }
+             } else if (time_since_last_detection < 2000) {
+                // ESP_LOGI(TAG, "DOA timer not reached: %ums since last detection", time_since_last_detection);
+             } else {
+                 ESP_LOGW(TAG, "DOA conditions not met: accumulated_samples=%zu, required=%zu", 
+                          accumulated_audio_data.size(), required_samples);
+             }
+         
             std::vector<int16_t> data;
             int samples = OPUS_FRAME_DURATION_MS * 16000 / 1000;
             if (ReadAudioData(data, 16000, samples)) {
-                // If input channels is 2, we need to fetch the left channel data
+                // 将左右声道都加入accumulated_audio_data
+                accumulated_audio_data.insert(accumulated_audio_data.end(), data.begin(), data.end());
+
+                // If input channels is 2, we need to fetch the left channel data for mono encoding
                 if (codec_->input_channels() == 2) {
                     auto mono_data = std::vector<int16_t>(data.size() / 2);
                     for (size_t i = 0, j = 0; i < mono_data.size(); ++i, j += 2) {
@@ -220,7 +307,7 @@ void AudioService::AudioInputTask() {
                     }
                     data = std::move(mono_data);
                 }
-                PushTaskToEncodeQueue(kAudioTaskTypeEncodeToTestingQueue, std::move(data));
+              //  PushTaskToEncodeQueue(kAudioTaskTypeEncodeToTestingQueue, std::move(data));
                 continue;
             }
         }
