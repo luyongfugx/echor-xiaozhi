@@ -773,9 +773,9 @@ void AudioService::SetModelsList(srmodel_list_t* models_list) {
             // 在唤醒词检测到时执行DOA检测
             PerformDOADetection();
             
-            if (callbacks_.on_wake_word_detected) {
-                callbacks_.on_wake_word_detected(wake_word);
-            }
+            // if (callbacks_.on_wake_word_detected) {
+            //     callbacks_.on_wake_word_detected(wake_word);
+            // }
         });
     }
 }
@@ -791,7 +791,7 @@ void AudioService::generate_test_frame(int16_t *left, int16_t *right, int frame_
 {
     int TEST_FREQ = 1000;
     static float phase = 0.0f;
-    const float d = 0.045f;
+    const float d = 0.06f;
     const float c = 343.0f;
 
     float theta = angle_deg * M_PI / 180.0f;
@@ -806,17 +806,8 @@ void AudioService::generate_test_frame(int16_t *left, int16_t *right, int frame_
 
         int delayed_index = i - delay_samples;
         right[i] = (int16_t)(sinf(2 * M_PI * TEST_FREQ * (delayed_index + phase) / sample_rate) * 32767);
-        
     }
     phase += frame_size;
-    
-    // 将生成的测试数据添加到doa_buffer_中
-    ESP_LOGI(TAG, "Adding generated test data to doa_buffer_: %d frames", frame_size);
-    for (int i = 0; i < frame_size; i++) {
-        doa_buffer_.push_back(left[i]);
-        doa_buffer_.push_back(right[i]);
-    }
-    ESP_LOGI(TAG, "doa_buffer_ size after adding test data: %zu", doa_buffer_.size());
 }
 
 void AudioService::GenerateTestAudioData(float angle_deg, int duration_ms) {
@@ -866,35 +857,38 @@ void AudioService::PerformDOADetection() {
 
 
 
-    int frame_samples = 128;
+
+
+
+    int frame_samples = 1024;
     int sample_rate = 16000;
+//   int frame_samples = 1024;
+//     int sample_rate = 16000;
     int16_t *left = (int16_t *)malloc(frame_samples * sizeof(int16_t));
     int16_t *right = (int16_t *)malloc(frame_samples * sizeof(int16_t));
     int start_size = heap_caps_get_free_size(MALLOC_CAP_8BIT);
-     doa_handle_t *doa = esp_doa_create(sample_rate, 0.045f, 0.06f, frame_samples);
+    doa_handle_t *doa = esp_doa_create(sample_rate, 20.0f, 0.06f, frame_samples);
 
     uint32_t c0, c1, t_doa = 0;
-    int angle = 85;
-    int f =85;
-    //for (int f = 0; f < angle; f++) { // 1秒多帧
-        this->generate_test_frame(left, right, frame_samples, f*1.0, sample_rate);
-        // c0 = esp_timer_get_time();
+    int angle = 80;
+   // int f = 66;
+    for (int f = 0; f < angle; f++) { // 1秒多帧
+        generate_test_frame(left, right, frame_samples, f*1.0, sample_rate);
+        c0 = esp_timer_get_time();
         float est_angle = esp_doa_process(doa, left, right);
-        // c1 = esp_timer_get_time();
-        // t_doa += c1 - c0;
+        c1 = esp_timer_get_time();
+        t_doa += c1 - c0;
 
-         printf("%.1f\t\t%.1f\n", f*1.0, est_angle); // memory leak
-   // }
-    // int doa_mem_size = start_size - heap_caps_get_free_size(MALLOC_CAP_8BIT);
-    // printf("doa memory size:%d, cpu loading:%f\n", doa_mem_size, (t_doa * 1.0 / 1000000 * sample_rate) / (angle * frame_samples));
+        printf("%.1f\t\t%.1f\n", f*1.0, est_angle); // memory leak
+   }
+    int doa_mem_size = start_size - heap_caps_get_free_size(MALLOC_CAP_8BIT);
+    printf("doa memory size:%d, cpu loading:%f\n", doa_mem_size, (t_doa * 1.0 / 1000000 * sample_rate) / (angle * frame_samples));
  
-    // esp_doa_destroy(doa);
+    esp_doa_destroy(doa);
+    int end_size = heap_caps_get_free_size(MALLOC_CAP_8BIT);
 
-
+    return;
     static doa_handle_t* simple_doa_handle = nullptr;
-    if(true){
-        return ;
-    }
     
     // 初始化DOA处理器
     if (simple_doa_handle == nullptr) {
@@ -921,9 +915,6 @@ void AudioService::PerformDOADetection() {
     if (total_channels < 2) {
         ESP_LOGW(TAG, "DOA detection requires at least 2 input channels, but only %d available", total_channels);
         return;
-    }
-    else {
-        return ;
     }
     
     size_t required_samples = 128 * total_channels;  // DOA处理需要的样本数
