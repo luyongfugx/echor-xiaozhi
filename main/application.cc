@@ -437,6 +437,22 @@ void Application::Start() {
     callbacks.on_vad_change = [this](bool speaking) {
         xEventGroupSetBits(event_group_, MAIN_EVENT_VAD_CHANGE);
     };
+    callbacks.on_doa_detected = [this](float angle) {
+        ESP_LOGI(TAG, "DOA Detection Result: Sound source direction = %.1f degrees", angle);
+        
+        // 这里可以添加更多处理逻辑，比如：
+        // 1. 显示角度信息到屏幕
+        // 2. 控制设备转向声源方向
+        // 3. 记录角度数据用于后续分析
+        
+        auto display = Board::GetInstance().GetDisplay();
+        char message[64];
+        snprintf(message, sizeof(message), "doa: %.1f°", angle);
+        display->ShowNotification(message);
+        
+        // 如果需要，可以在这里添加控制设备转向的逻辑
+        // rotateBaseBoard(static_cast<int>(angle));
+    };
     audio_service_.SetCallbacks(callbacks);
 
     // Start the main event loop task with priority 3
