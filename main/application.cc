@@ -449,9 +449,8 @@ void Application::Start() {
         char message[64];
         snprintf(message, sizeof(message), "doa: %.1f°", angle);
         display->ShowNotification(message);
-        
         // 如果需要，可以在这里添加控制设备转向的逻辑
-        // rotateBaseBoard(static_cast<int>(angle));
+        rotateBaseBoard(static_cast<int>(angle));
     };
     audio_service_.SetCallbacks(callbacks);
 
