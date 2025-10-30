@@ -17,7 +17,7 @@
 #endif
 
 #define TAG "AudioService"
-#define AUDIO_SERVICE_INPUT_SAMPLE_RATE  48000
+#define AUDIO_SERVICE_INPUT_SAMPLE_RATE  16000
 
 AudioService::AudioService() {
     event_group_ = xEventGroupCreate();
