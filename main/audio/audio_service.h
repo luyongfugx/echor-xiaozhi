@@ -166,7 +166,7 @@ private:
     void generate_test_frame(int16_t *left, int16_t *right, int frame_size, float angle_deg, int sample_rate);
     // void TestDoaFunctionality();
     doa_handle_t* doa_handle_ = nullptr;
-    int doa_sample_rate_ = 16000;
+    // int doa_sample_rate_ = 40000;
     int doa_frame_samples_ = 1024;
     int total_channels_ = 0;  // 添加总通道数成员
     std::vector<int16_t> doa_buffer_;  // DOA 数据累积缓冲区

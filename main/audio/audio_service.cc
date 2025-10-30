@@ -17,7 +17,7 @@
 #endif
 
 #define TAG "AudioService"
-
+#define AUDIO_SERVICE_INPUT_SAMPLE_RATE  48000
 
 AudioService::AudioService() {
     event_group_ = xEventGroupCreate();
@@ -36,12 +36,12 @@ void AudioService::Initialize(AudioCodec* codec) {
 
     /* Setup the audio codec */
     opus_decoder_ = std::make_unique<OpusDecoderWrapper>(codec->output_sample_rate(), 1, OPUS_FRAME_DURATION_MS);
-    opus_encoder_ = std::make_unique<OpusEncoderWrapper>(16000, 1, OPUS_FRAME_DURATION_MS);
+    opus_encoder_ = std::make_unique<OpusEncoderWrapper>(AUDIO_SERVICE_INPUT_SAMPLE_RATE, 1, OPUS_FRAME_DURATION_MS);
     opus_encoder_->SetComplexity(0);
 
-    if (codec->input_sample_rate() != 16000) {
-        input_resampler_.Configure(codec->input_sample_rate(), 16000);
-        reference_resampler_.Configure(codec->input_sample_rate(), 16000);
+    if (codec->input_sample_rate() != AUDIO_SERVICE_INPUT_SAMPLE_RATE) {
+        input_resampler_.Configure(codec->input_sample_rate(), AUDIO_SERVICE_INPUT_SAMPLE_RATE);
+        reference_resampler_.Configure(codec->input_sample_rate(), AUDIO_SERVICE_INPUT_SAMPLE_RATE);
     }
 
 #if CONFIG_USE_AUDIO_PROCESSOR
@@ -213,8 +213,8 @@ void AudioService::AudioInputTask() {
             }
          
              std::vector<int16_t> data;
-            int samples = OPUS_FRAME_DURATION_MS * 16000 / 1000;
-            if (ReadAudioData(data, 16000, samples)) {
+            int samples = OPUS_FRAME_DURATION_MS * AUDIO_SERVICE_INPUT_SAMPLE_RATE / 1000;
+            if (ReadAudioData(data, AUDIO_SERVICE_INPUT_SAMPLE_RATE, samples)) {
                 if (codec_->input_channels() == 2) {
                     auto mono_data = std::vector<int16_t>(data.size() / 2);
                     for (size_t i = 0, j = 0; i < mono_data.size(); ++i, j += 2) {
@@ -232,12 +232,12 @@ void AudioService::AudioInputTask() {
             std::vector<int16_t> data;
             int samples = wake_word_->GetFeedSize();
             if (samples > 0) {
-                if (ReadAudioData(data, 16000, samples)) {
+                if (ReadAudioData(data, AUDIO_SERVICE_INPUT_SAMPLE_RATE, samples)) {
                     // 将音频数据累积到doa_buffer_中，用于唤醒词触发的DOA检测
                     doa_buffer_.insert(doa_buffer_.end(), data.begin(), data.end());
                     
                     // 限制doa_buffer_大小，避免无限增长（保留最近2秒的数据）
-                    size_t two_seconds_samples = 16000 * 4 * 2;  // 16000 Hz * 2秒 * 2通道
+                    size_t two_seconds_samples = AUDIO_SERVICE_INPUT_SAMPLE_RATE * 0.5 * 2;  // 16000 Hz * 2秒 * 2通道
                     if (doa_buffer_.size() > two_seconds_samples) {
                         doa_buffer_.erase(doa_buffer_.begin(), 
                             doa_buffer_.begin() + (doa_buffer_.size() - two_seconds_samples));
@@ -254,7 +254,7 @@ void AudioService::AudioInputTask() {
             std::vector<int16_t> data;
             int samples = audio_processor_->GetFeedSize();
             if (samples > 0) {
-                if (ReadAudioData(data, 16000, samples)) {
+                if (ReadAudioData(data, AUDIO_SERVICE_INPUT_SAMPLE_RATE, samples)) {
                     audio_processor_->Feed(std::move(data));
                     continue;
                 }
@@ -356,7 +356,7 @@ void AudioService::OpusCodecTask() {
 
             auto packet = std::make_unique<AudioStreamPacket>();
             packet->frame_duration = OPUS_FRAME_DURATION_MS;
-            packet->sample_rate = 16000;
+            packet->sample_rate = AUDIO_SERVICE_INPUT_SAMPLE_RATE;
             packet->timestamp = task->timestamp;
             if (!opus_encoder_->Encode(std::move(task->pcm), packet->payload)) {
                 ESP_LOGE(TAG, "Failed to encode audio");
@@ -552,7 +552,7 @@ void AudioService::PlaySound(const std::string_view& ogg) {
 
     bool seen_head = false;
     bool seen_tags = false;
-    int sample_rate = 16000; // 默认值
+    int sample_rate = AUDIO_SERVICE_INPUT_SAMPLE_RATE; // 默认值
 
     while (true) {
         size_t pos = find_page(offset);
@@ -738,7 +738,7 @@ void AudioService::generate_test_frame(int16_t *left, int16_t *right, int frame_
 void AudioService::GenerateTestAudioData(float angle_deg, int duration_ms) {
     const float MIC_DISTANCE_M = 0.045f;  // 麦克风间距45毫米
     const float SPEED_SOUND = 343.0f;     // 声速343 m/s
-    const int SAMPLE_RATE = 16000;
+    const int SAMPLE_RATE = AUDIO_SERVICE_INPUT_SAMPLE_RATE;
     const float FREQ = 1000.0f;           // 测试频率1kHz
     
     int total_samples = SAMPLE_RATE * duration_ms / 1000;
@@ -783,7 +783,7 @@ void AudioService::GenerateTestAudioData(float angle_deg, int duration_ms) {
 void AudioService::PerformDOADetection() {
     static doa_handle_t* simple_doa_handle = nullptr;
     const int frame_samples = 1024;
-    int sample_rate = 16000;
+    int sample_rate = AUDIO_SERVICE_INPUT_SAMPLE_RATE;
     float mic_distance = 0.045f;  // 45毫米
     // 检查编解码器是否支持双麦克风输入
     int total_channels = 2;
