@@ -23,8 +23,7 @@
 #include "wake_word.h"
 #include "protocol.h"
 
-
-//doa
+// doa
 #include "esp_doa.h"
 
 /*
@@ -33,9 +32,9 @@
  * 2. (Server) -> {Decode Queue} -> [Opus Decoder] -> {Playback Queue} -> (Speaker)
  *
  * We use one task for MIC / Speaker / Processors, and one task for Opus Encoder / Opus Decoder.
- * 
+ *
  * Decode Queue and Send Queue are the main queues, because Opus packets are quite smaller than PCM packets.
- * 
+ *
  */
 
 #define OPUS_FRAME_DURATION_MS 60
@@ -49,51 +48,54 @@
 #define AUDIO_POWER_TIMEOUT_MS 15000
 #define AUDIO_POWER_CHECK_INTERVAL_MS 1000
 
+#define AS_EVENT_AUDIO_TESTING_RUNNING (1 << 0)
+#define AS_EVENT_WAKE_WORD_RUNNING (1 << 1)
+#define AS_EVENT_AUDIO_PROCESSOR_RUNNING (1 << 2)
+#define AS_EVENT_PLAYBACK_NOT_EMPTY (1 << 3)
 
-#define AS_EVENT_AUDIO_TESTING_RUNNING      (1 << 0)
-#define AS_EVENT_WAKE_WORD_RUNNING          (1 << 1)
-#define AS_EVENT_AUDIO_PROCESSOR_RUNNING    (1 << 2)
-#define AS_EVENT_PLAYBACK_NOT_EMPTY         (1 << 3)
-
-struct AudioServiceCallbacks {
+struct AudioServiceCallbacks
+{
     std::function<void(void)> on_send_queue_available;
-    std::function<void(const std::string&)> on_wake_word_detected;
+    std::function<void(const std::string &)> on_wake_word_detected;
     std::function<void(bool)> on_vad_change;
     std::function<void(void)> on_audio_testing_queue_full;
     std::function<void(float)> on_doa_detected;
 };
 
-
-enum AudioTaskType {
+enum AudioTaskType
+{
     kAudioTaskTypeEncodeToSendQueue,
     kAudioTaskTypeEncodeToTestingQueue,
     kAudioTaskTypeDecodeToPlaybackQueue,
 };
 
-struct AudioTask {
+struct AudioTask
+{
     AudioTaskType type;
     std::vector<int16_t> pcm;
     uint32_t timestamp;
 };
 
-struct DebugStatistics {
+struct DebugStatistics
+{
     uint32_t input_count = 0;
     uint32_t decode_count = 0;
     uint32_t encode_count = 0;
     uint32_t playback_count = 0;
 };
 
-class AudioService {
+class AudioService
+{
 public:
     AudioService();
     ~AudioService();
 
-    void Initialize(AudioCodec* codec);
+    void Initialize(AudioCodec *codec);
     void Start();
     void Stop();
     void EncodeWakeWord();
     std::unique_ptr<AudioStreamPacket> PopWakeWordPacket();
-    const std::string& GetLastWakeWord() const;
+    const std::string &GetLastWakeWord() const;
     bool IsVoiceDetected() const { return voice_detected_; }
     bool IsIdle();
     bool IsWakeWordRunning() const { return xEventGroupGetBits(event_group_) & AS_EVENT_WAKE_WORD_RUNNING; }
@@ -105,18 +107,19 @@ public:
     void EnableAudioTesting(bool enable);
     void EnableDeviceAec(bool enable);
 
-    void SetCallbacks(AudioServiceCallbacks& callbacks);
+    void SetCallbacks(AudioServiceCallbacks &callbacks);
 
     bool PushPacketToDecodeQueue(std::unique_ptr<AudioStreamPacket> packet, bool wait = false);
     std::unique_ptr<AudioStreamPacket> PopPacketFromSendQueue();
-    void PlaySound(const std::string_view& sound);
-    bool ReadAudioData(std::vector<int16_t>& data, int sample_rate, int samples);
+    void PlaySound(const std::string_view &sound);
+    bool ReadAudioData(std::vector<int16_t> &data, int sample_rate, int samples);
     void ResetDecoder();
-    void SetModelsList(srmodel_list_t* models_list);
-    void TestDOAWithAngle(float angle_deg);
+    void SetModelsList(srmodel_list_t *models_list);
+    // Set DOA algorithm mode: false = time-domain simple, true = FFT (GCC-PHAT)
+    void SetDoaMode(bool use_fft);
 
 private:
-    AudioCodec* codec_ = nullptr;
+    AudioCodec *codec_ = nullptr;
     AudioServiceCallbacks callbacks_;
     std::unique_ptr<AudioProcessor> audio_processor_;
     std::unique_ptr<WakeWord> wake_word_;
@@ -127,7 +130,7 @@ private:
     OpusResampler reference_resampler_;
     OpusResampler output_resampler_;
     DebugStatistics debug_statistics_;
-    srmodel_list_t* models_list_ = nullptr;
+    srmodel_list_t *models_list_ = nullptr;
 
     EventGroupHandle_t event_group_;
 
@@ -135,6 +138,7 @@ private:
     TaskHandle_t audio_input_task_handle_ = nullptr;
     TaskHandle_t audio_output_task_handle_ = nullptr;
     TaskHandle_t opus_codec_task_handle_ = nullptr;
+    TaskHandle_t doa_task_handle_ = nullptr; // DOA持续检测任务
     std::mutex audio_queue_mutex_;
     std::condition_variable audio_queue_cv_;
     std::deque<std::unique_ptr<AudioStreamPacket>> audio_decode_queue_;
@@ -158,26 +162,23 @@ private:
     void AudioInputTask();
     void AudioOutputTask();
     void OpusCodecTask();
-    void PushTaskToEncodeQueue(AudioTaskType type, std::vector<int16_t>&& pcm);
+    void ContinuousDOATask(); // 持续DOA检测任务
+    void PushTaskToEncodeQueue(AudioTaskType type, std::vector<int16_t> &&pcm);
     void SetDecodeSampleRate(int sample_rate, int frame_duration);
     void CheckAndUpdateAudioPowerState();
     void PerformDOADetection();
-    void GenerateTestAudioData(float angle_deg, int duration_ms = 1000);
-    void generate_test_frame(int16_t *left, int16_t *right, int frame_size, float angle_deg, int sample_rate);
-    // void TestDoaFunctionality();
-    doa_handle_t* doa_handle_ = nullptr;
-    // int doa_sample_rate_ = 40000;
-    int doa_frame_samples_ = 1024;
-    int total_channels_ = 0;  // 添加总通道数成员
-    std::vector<int16_t> doa_buffer_;  // DOA 数据累积缓冲区
 
-    std::vector<int16_t> pre_wake_word_buffer_;  // 唤醒词前音频数据缓冲区
-    size_t pre_wake_word_buffer_size_ = 0;  // 预存储缓冲区大小（0.2秒数据）
-    std::function<void(float angle)> doa_callback_;  // DOA 角度回调
-    bool doa_enabled_ = false;  // DOA检测启用标志
-    uint32_t last_buffer_check_ = 0;  // 上次缓冲区检查时间
-    uint32_t buffer_full_count_ = 0;  // 缓冲区满计数
-    uint32_t consecutive_timeouts_ = 0;  // 连续超时计数
+    int doa_frame_samples_ = 1024;
+    int total_channels_ = 0;          // 添加总通道数成员
+    std::vector<int16_t> doa_buffer_; // DOA 数据累积缓冲区
+
+    std::function<void(float angle)> doa_callback_; // DOA 角度回调
+    bool doa_enabled_ = false;                      // DOA检测启用标志(true=FFT, false=Simple)
+    bool doa_detection_running_ = false;            // 防止并发的DOA线程
+    bool continuous_doa_enabled_ = true;            // 持续DOA检测启用标志
+    uint32_t last_buffer_check_ = 0;                // 上次缓冲区检查时间
+    uint32_t buffer_full_count_ = 0;                // 缓冲区满计数
+    uint32_t consecutive_timeouts_ = 0;             // 连续超时计数
 };
 
 #endif
